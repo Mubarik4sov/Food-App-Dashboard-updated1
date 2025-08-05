@@ -96,7 +96,7 @@ export default function CategoriesPage() {
 
       const response = await apiService.createUpdateCategory(categoryData);
 
-      if (response.errorCode === 0) {
+      if (response.errorCode === 0 && response.data) {
         await loadCategories(); // Reload categories
         setShowAddForm(false);
         setFormData({
@@ -107,6 +107,8 @@ export default function CategoriesPage() {
           isSubCategory: false,
           coverImage: "",
         });
+        // Show success message
+        alert("Category created successfully!");
       } else {
         setError(response.errorMessage || "Failed to create category");
       }
@@ -135,8 +137,10 @@ export default function CategoriesPage() {
     }
 
     try {
+      setError("");
       await apiService.deleteCategory({ categoryId });
       await loadCategories(); // Reload categories
+      alert("Category deleted successfully!");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to delete category");
     }
@@ -150,6 +154,7 @@ export default function CategoriesPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button
+                type="button"
                 onClick={() => setShowAddForm(false)}
                 className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors"
               >
@@ -194,6 +199,7 @@ export default function CategoriesPage() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="Enter category name"
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
 
@@ -211,6 +217,7 @@ export default function CategoriesPage() {
                     placeholder="Enter short description (max 100 characters)"
                     maxLength={100}
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
 
@@ -226,6 +233,7 @@ export default function CategoriesPage() {
                     rows={4}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="Enter detailed description of the category"
+                    disabled={isSubmitting}
                   />
                 </div>
 
@@ -239,6 +247,7 @@ export default function CategoriesPage() {
                         handleInputChange("isSubCategory", e.target.checked)
                       }
                       className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                      disabled={isSubmitting}
                     />
                     <label
                       htmlFor="isSubCategory"
@@ -262,6 +271,7 @@ export default function CategoriesPage() {
                         }}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                         required={formData.isSubCategory}
+                        disabled={isSubmitting}
                       >
                         {parentCategories.map((category) => (
                           <option key={category.id} value={category.id}>
@@ -293,6 +303,7 @@ export default function CategoriesPage() {
                   onChange={(e) => handleInputChange("coverImage", e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="Enter image URL or leave empty for default"
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
@@ -314,6 +325,7 @@ export default function CategoriesPage() {
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
+                disabled={isSubmitting}
                 className="bg-gray-100 text-gray-700 px-8 py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium"
               >
                 Cancel
