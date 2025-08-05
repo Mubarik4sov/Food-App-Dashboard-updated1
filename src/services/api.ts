@@ -115,6 +115,9 @@ class ApiService {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
+  console.log("Making request to:", url);
+  console.log("Request options:", { ...options, headers: { ...defaultHeaders, ...options.headers } });
+
   try {
     const response = await fetch(url, {
       ...options,
@@ -134,6 +137,9 @@ class ApiService {
       responseData = { message: text };
     }
 
+    console.log("Response status:", response.status);
+    console.log("Response data:", responseData);
+
     // ✅ Return responseData on success
     if (response.ok) {
       return responseData;
@@ -144,6 +150,7 @@ class ApiService {
       responseData.errorMessage || responseData.message || 'Request failed';
     throw new Error(errorMessage);
   } catch (error: any) {
+    console.error("API request failed:", error);
     // ✅ Only show this if it's a real fetch/network failure
     if (
       error instanceof TypeError &&
@@ -207,10 +214,12 @@ class ApiService {
   }
 
   async createUpdateCategory(data: CreateUpdateCategoryRequest): Promise<CategoryResponse> {
-    return this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
+    const response = await this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+    console.log("Raw API response for createUpdateCategory:", response);
+    return response;
   }
 
   async deleteCategory(data: DeleteCategoryRequest): Promise<{ success: boolean; message: string }> {

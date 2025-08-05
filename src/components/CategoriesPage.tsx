@@ -84,6 +84,8 @@ export default function CategoriesPage() {
     setIsSubmitting(true);
     setError("");
 
+    console.log("Submitting category data:", formData);
+
     try {
       const categoryData: CreateUpdateCategoryRequest = {
         categoryName: formData.categoryName,
@@ -94,9 +96,13 @@ export default function CategoriesPage() {
         parentCategoryIds: formData.isSubCategory ? formData.parentCategoryIds : [],
       };
 
+      console.log("Sending to API:", categoryData);
+
       const response = await apiService.createUpdateCategory(categoryData);
 
-      if (response.errorCode === 0 && response.data) {
+      console.log("API Response:", response);
+
+      if (response && response.errorCode === 0) {
         await loadCategories(); // Reload categories
         setShowAddForm(false);
         setFormData({
@@ -109,7 +115,7 @@ export default function CategoriesPage() {
         });
         // Show success message
         alert("Category created successfully!");
-      } else {
+      } else if (response) {
         setError(response.errorMessage || "Failed to create category");
       }
     } catch (error) {
