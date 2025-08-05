@@ -57,6 +57,47 @@ export interface ForgotPasswordResponse {
   message: string;
 }
 
+export interface Category {
+  id: number;
+  categoryName: string;
+  isSubCategory: boolean;
+  longDescription: string;
+  shortDescription: string;
+  coverImage: string;
+  parentCategoryIds: number[];
+  createdAt?: string;
+  updatedAt?: string;
+  parentCategories?: Category[];
+  subCategories?: Category[];
+}
+
+export interface CreateUpdateCategoryRequest {
+  id?: number;
+  categoryName: string;
+  isSubCategory: boolean;
+  longDescription: string;
+  shortDescription: string;
+  coverImage: string;
+  parentCategoryIds: number[];
+}
+
+export interface DeleteCategoryRequest {
+  categoryId: number;
+  parentCategoryId?: number;
+}
+
+export interface CategoriesResponse {
+  errorCode: number;
+  errorMessage: string | null;
+  data: Category[] | null;
+}
+
+export interface CategoryResponse {
+  errorCode: number;
+  errorMessage: string | null;
+  data: Category | null;
+}
+
 class ApiService {
   private async makeRequest<T>(
   endpoint: string,
@@ -142,6 +183,39 @@ class ApiService {
   async forgotPassword(data: ForgotPasswordRequest): Promise<ForgotPasswordResponse> {
     return this.makeRequest<ForgotPasswordResponse>('/auth/forgot-password', {
       method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Category APIs
+  async getAllCategories(): Promise<CategoriesResponse> {
+    return this.makeRequest<CategoriesResponse>('/category/getAll', {
+      method: 'GET',
+    });
+  }
+
+  async getParentCategories(): Promise<CategoriesResponse> {
+    return this.makeRequest<CategoriesResponse>('/category/getOnlyParentCategories', {
+      method: 'GET',
+    });
+  }
+
+  async getSubCategories(parentId: number): Promise<CategoriesResponse> {
+    return this.makeRequest<CategoriesResponse>(`/category/getSubCategories/${parentId}`, {
+      method: 'GET',
+    });
+  }
+
+  async createUpdateCategory(data: CreateUpdateCategoryRequest): Promise<CategoryResponse> {
+    return this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCategory(data: DeleteCategoryRequest): Promise<{ success: boolean; message: string }> {
+    return this.makeRequest<{ success: boolean; message: string }>('/category/softDeleteOrDetach', {
+      method: 'DELETE',
       body: JSON.stringify(data),
     });
   }

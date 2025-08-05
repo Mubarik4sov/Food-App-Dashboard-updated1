@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -12,154 +12,112 @@ import {
   X,
   Save,
   ArrowLeft,
+  Loader,
 } from "lucide-react";
-
-interface Category {
-  id: string;
-  name: string;
-  parentId: string | null;
-  parentName?: string;
-  mainImage: string;
-  bannerImage: string;
-  status: "active" | "inactive";
-  productsCount: number;
-  createdDate: string;
-}
-
-const sampleCategories: Category[] = [
-  {
-    id: "1",
-    name: "Pizza",
-    parentId: null,
-    mainImage:
-      "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300",
-    bannerImage:
-      "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=800",
-    status: "active",
-    productsCount: 12,
-    createdDate: "2024-01-15",
-  },
-  {
-    id: "2",
-    name: "Margherita Pizza",
-    parentId: "1",
-    parentName: "Pizza",
-    mainImage:
-      "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300",
-    bannerImage:
-      "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=800",
-    status: "active",
-    productsCount: 3,
-    createdDate: "2024-01-16",
-  },
-  {
-    id: "3",
-    name: "Burgers",
-    parentId: null,
-    mainImage:
-      "https://images.pexels.com/photos/1556909/pexels-photo-1556909.jpeg?auto=compress&cs=tinysrgb&w=300",
-    bannerImage:
-      "https://images.pexels.com/photos/1556909/pexels-photo-1556909.jpeg?auto=compress&cs=tinysrgb&w=800",
-    status: "active",
-    productsCount: 8,
-    createdDate: "2024-01-20",
-  },
-  {
-    id: "4",
-    name: "Cheese Burger",
-    parentId: "3",
-    parentName: "Burgers",
-    mainImage:
-      "https://images.pexels.com/photos/1556909/pexels-photo-1556909.jpeg?auto=compress&cs=tinysrgb&w=300",
-    bannerImage:
-      "https://images.pexels.com/photos/1556909/pexels-photo-1556909.jpeg?auto=compress&cs=tinysrgb&w=800",
-    status: "active",
-    productsCount: 2,
-    createdDate: "2024-01-21",
-  },
-  {
-    id: "5",
-    name: "Desserts",
-    parentId: null,
-    mainImage:
-      "https://images.pexels.com/photos/1352278/pexels-photo-1352278.jpeg?auto=compress&cs=tinysrgb&w=300",
-    bannerImage:
-      "https://images.pexels.com/photos/1352278/pexels-photo-1352278.jpeg?auto=compress&cs=tinysrgb&w=800",
-    status: "active",
-    productsCount: 5,
-    createdDate: "2024-01-25",
-  },
-];
+import { apiService, Category, CreateUpdateCategoryRequest } from "../services/api";
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>(sampleCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
-    null
-  );
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
+    categoryName: "",
     shortDescription: "",
     longDescription: "",
-    parentId: "",
-    isParent: true,
-    mainImage: "",
-    bannerImage: "",
+    parentCategoryIds: [] as number[],
+    isSubCategory: false,
+    coverImage: "",
   });
+
+  // Load categories on component mount
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const response = await apiService.getAllCategories();
+      
+      if (response.errorCode === 0 && response.data) {
+        setCategories(response.data);
+      } else {
+        setError(response.errorMessage || "Failed to load categories");
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to load categories");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredCategories = categories.filter(
     (category) =>
-      category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (category.parentName &&
-        category.parentName.toLowerCase().includes(searchTerm.toLowerCase()))
+      category.categoryName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      category.shortDescription?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const parentCategories = categories.filter((cat) => cat.parentId === null);
+  const parentCategories = categories.filter((cat) => !cat.isSubCategory);
   const totalCategories = categories.length;
   const parentCategoriesCount = parentCategories.length;
-  const subCategoriesCount = categories.filter(
-    (cat) => cat.parentId !== null
-  ).length;
+  const subCategoriesCount = categories.filter((cat) => cat.isSubCategory).length;
 
   const handleAddCategory = () => {
     setShowAddForm(true);
     setFormData({
-      name: "",
+      categoryName: "",
       shortDescription: "",
       longDescription: "",
-      parentId: "",
-      isParent: true,
-      mainImage: "",
-      bannerImage: "",
+      parentCategoryIds: [],
+      isSubCategory: false,
+      coverImage: "",
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCategory: Category = {
-      id: (categories.length + 1).toString(),
-      name: formData.name,
-      parentId: formData.isParent ? null : formData.parentId || null,
-      parentName: formData.isParent
-        ? undefined
-        : parentCategories.find((p) => p.id === formData.parentId)?.name,
-      mainImage:
-        formData.mainImage ||
-        "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300",
-      bannerImage:
-        formData.bannerImage ||
-        "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=800",
-      status: "active",
-      productsCount: 0,
-      createdDate: new Date().toISOString().split("T")[0],
-    };
+    setIsSubmitting(true);
+    setError("");
 
-    setCategories([...categories, newCategory]);
-    setShowAddForm(false);
+    try {
+      const categoryData: CreateUpdateCategoryRequest = {
+        categoryName: formData.categoryName,
+        shortDescription: formData.shortDescription,
+        longDescription: formData.longDescription,
+        isSubCategory: formData.isSubCategory,
+        coverImage: formData.coverImage || "/default-category.jpg",
+        parentCategoryIds: formData.isSubCategory ? formData.parentCategoryIds : [],
+      };
+
+      const response = await apiService.createUpdateCategory(categoryData);
+
+      if (response.errorCode === 0) {
+        await loadCategories(); // Reload categories
+        setShowAddForm(false);
+        setFormData({
+          categoryName: "",
+          shortDescription: "",
+          longDescription: "",
+          parentCategoryIds: [],
+          isSubCategory: false,
+          coverImage: "",
+        });
+      } else {
+        setError(response.errorMessage || "Failed to create category");
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to create category");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleInputChange = (field: string, value: string | boolean) => {
+  const handleInputChange = (field: string, value: string | boolean | number[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -169,6 +127,19 @@ export default function CategoriesPage() {
 
   const closeModal = () => {
     setSelectedCategory(null);
+  };
+
+  const handleDeleteCategory = async (categoryId: number) => {
+    if (!confirm("Are you sure you want to delete this category?")) {
+      return;
+    }
+
+    try {
+      await apiService.deleteCategory({ categoryId });
+      await loadCategories(); // Reload categories
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to delete category");
+    }
   };
 
   if (showAddForm) {
@@ -199,6 +170,12 @@ export default function CategoriesPage() {
 
         {/* Form */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-6">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Category Information */}
             <div>
@@ -212,8 +189,8 @@ export default function CategoriesPage() {
                   </label>
                   <input
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => handleInputChange("name", e.target.value)}
+                    value={formData.categoryName}
+                    onChange={(e) => handleInputChange("categoryName", e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="Enter category name"
                     required
@@ -256,41 +233,45 @@ export default function CategoriesPage() {
                   <div className="flex items-center space-x-3 mb-4">
                     <input
                       type="checkbox"
-                      id="isParent"
-                      checked={formData.isParent}
+                      id="isSubCategory"
+                      checked={formData.isSubCategory}
                       onChange={(e) =>
-                        handleInputChange("isParent", e.target.checked)
+                        handleInputChange("isSubCategory", e.target.checked)
                       }
                       className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                     />
                     <label
-                      htmlFor="isParent"
+                      htmlFor="isSubCategory"
                       className="text-sm font-medium text-gray-700"
                     >
-                      This is a parent category
+                      This is a sub-category
                     </label>
                   </div>
 
-                  {!formData.isParent && (
+                  {formData.isSubCategory && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Category *
+                        Parent Categories *
                       </label>
                       <select
-                        value={formData.parentId}
-                        onChange={(e) =>
-                          handleInputChange("parentId", e.target.value)
-                        }
+                        multiple
+                        value={formData.parentCategoryIds.map(String)}
+                        onChange={(e) => {
+                          const selectedIds = Array.from(e.target.selectedOptions, option => parseInt(option.value));
+                          handleInputChange("parentCategoryIds", selectedIds);
+                        }}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                        required={!formData.isParent}
+                        required={formData.isSubCategory}
                       >
-                        <option value="">Select parent category</option>
                         {parentCategories.map((category) => (
                           <option key={category.id} value={category.id}>
-                            {category.name}
+                            {category.categoryName}
                           </option>
                         ))}
                       </select>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Hold Ctrl/Cmd to select multiple parent categories
+                      </p>
                     </div>
                   )}
                 </div>
@@ -300,70 +281,19 @@ export default function CategoriesPage() {
             {/* Image Upload */}
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                Images
+                Cover Image
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Main Image
-                  </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-red-400 transition-colors">
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600 mb-2">
-                      Click to upload main image
-                    </p>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        // Handle file upload here
-                        console.log("Main image file:", e.target.files?.[0]);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="text-red-600 hover:text-red-700 text-sm font-medium"
-                      onClick={() =>
-                        document.querySelector('input[type="file"]')?.click()
-                      }
-                    >
-                      Choose File
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Banner Image
-                  </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-red-400 transition-colors">
-                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600 mb-2">
-                      Click to upload banner image
-                    </p>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        // Handle file upload here
-                        console.log("Banner image file:", e.target.files?.[0]);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="text-red-600 hover:text-red-700 text-sm font-medium"
-                      onClick={() =>
-                        document
-                          .querySelectorAll('input[type="file"]')[1]
-                          ?.click()
-                      }
-                    >
-                      Choose File
-                    </button>
-                  </div>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Image URL
+                </label>
+                <input
+                  type="url"
+                  value={formData.coverImage}
+                  onChange={(e) => handleInputChange("coverImage", e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="Enter image URL or leave empty for default"
+                />
               </div>
             </div>
 
@@ -371,10 +301,15 @@ export default function CategoriesPage() {
             <div className="flex space-x-4 pt-6">
               <button
                 type="submit"
-                className="bg-red-500 text-white px-8 py-3 rounded-lg hover:bg-red-600 transition-colors flex items-center space-x-2 font-medium"
+                disabled={isSubmitting}
+                className="bg-red-500 text-white px-8 py-3 rounded-lg hover:bg-red-600 transition-colors flex items-center space-x-2 font-medium disabled:opacity-50"
               >
-                <Save className="w-5 h-5" />
-                <span>Create Category</span>
+                {isSubmitting ? (
+                  <Loader className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Save className="w-5 h-5" />
+                )}
+                <span>{isSubmitting ? "Creating..." : "Create Category"}</span>
               </button>
               <button
                 type="button"
@@ -413,6 +348,13 @@ export default function CategoriesPage() {
             </button>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -473,93 +415,112 @@ export default function CategoriesPage() {
           </div>
         </div>
 
-        {/* Categories Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCategories.map((category) => (
-            <div
-              key={category.id}
-              className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
-            >
-              <div className="relative">
-                <img
-                  src={category.mainImage}
-                  alt={category.name}
-                  className="w-full h-48 object-cover"
-                />
-                <div className="absolute top-3 right-3">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      category.status === "active"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {category.status}
-                  </span>
-                </div>
-                <div className="absolute top-3 left-3">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      category.parentId
-                        ? "bg-orange-100 text-orange-800"
-                        : "bg-blue-100 text-blue-800"
-                    }`}
-                  >
-                    {category.parentId ? "Sub Category" : "Parent Category"}
-                  </span>
-                </div>
-              </div>
+        {/* Loading State */}
+        {loading && (
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+            <Loader className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
+            <h3 className="text-lg font-medium text-gray-800 mb-2">Loading Categories</h3>
+            <p className="text-gray-600">Please wait while we fetch your categories...</p>
+          </div>
+        )}
 
-              <div className="p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-gray-800 text-lg">
-                    {category.name}
-                  </h3>
-                  <div className="flex items-center space-x-1">
-                    {category.parentId ? (
-                      <FolderOpen className="w-4 h-4 text-orange-500" />
-                    ) : (
-                      <Folder className="w-4 h-4 text-blue-500" />
-                    )}
+        {/* Categories Grid */}
+        {!loading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredCategories.map((category) => (
+              <div
+                key={category.id}
+                className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+              >
+                <div className="relative">
+                  <img
+                    src={category.coverImage || "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300"}
+                    alt={category.categoryName}
+                    className="w-full h-48 object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300";
+                    }}
+                  />
+                  <div className="absolute top-3 left-3">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        category.isSubCategory
+                          ? "bg-orange-100 text-orange-800"
+                          : "bg-blue-100 text-blue-800"
+                      }`}
+                    >
+                      {category.isSubCategory ? "Sub Category" : "Parent Category"}
+                    </span>
                   </div>
                 </div>
 
-                {category.parentName && (
-                  <p className="text-gray-600 text-sm mb-2">
-                    Parent: {category.parentName}
+                <div className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-semibold text-gray-800 text-lg">
+                      {category.categoryName}
+                    </h3>
+                    <div className="flex items-center space-x-1">
+                      {category.isSubCategory ? (
+                        <FolderOpen className="w-4 h-4 text-orange-500" />
+                      ) : (
+                        <Folder className="w-4 h-4 text-blue-500" />
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                    {category.shortDescription}
                   </p>
-                )}
 
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-gray-600">
-                    {category.productsCount} products
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    Created:{" "}
-                    {new Date(category.createdDate).toLocaleDateString()}
-                  </span>
-                </div>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm text-gray-500">
+                      Created: {category.createdAt ? new Date(category.createdAt).toLocaleDateString() : 'N/A'}
+                    </span>
+                  </div>
 
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handleViewCategory(category)}
-                    className="flex-1 bg-red-50 text-red-600 py-2 px-3 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center space-x-1"
-                  >
-                    <Eye className="w-4 h-4" />
-                    <span className="text-sm">View</span>
-                  </button>
-                  <button className="flex-1 bg-blue-50 text-blue-600 py-2 px-3 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center space-x-1">
-                    <Edit className="w-4 h-4" />
-                    <span className="text-sm">Edit</span>
-                  </button>
-                  <button className="bg-red-50 text-red-600 p-2 rounded-lg hover:bg-red-100 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleViewCategory(category)}
+                      className="flex-1 bg-red-50 text-red-600 py-2 px-3 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center space-x-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span className="text-sm">View</span>
+                    </button>
+                    <button className="flex-1 bg-blue-50 text-blue-600 py-2 px-3 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center space-x-1">
+                      <Edit className="w-4 h-4" />
+                      <span className="text-sm">Edit</span>
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteCategory(category.id)}
+                      className="bg-red-50 text-red-600 p-2 rounded-lg hover:bg-red-100 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!loading && filteredCategories.length === 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+            <FolderOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-800 mb-2">No Categories Found</h3>
+            <p className="text-gray-600 mb-4">
+              {searchTerm ? "No categories match your search criteria." : "Get started by creating your first category."}
+            </p>
+            {!searchTerm && (
+              <button
+                onClick={handleAddCategory}
+                className="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Add Your First Category
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Category Detail Modal */}
@@ -569,9 +530,12 @@ export default function CategoriesPage() {
             {/* Modal Header */}
             <div className="relative">
               <img
-                src={selectedCategory.bannerImage}
-                alt={selectedCategory.name}
+                src={selectedCategory.coverImage || "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=800"}
+                alt={selectedCategory.categoryName}
                 className="w-full h-64 object-cover rounded-t-2xl"
+                onError={(e) => {
+                  e.currentTarget.src = "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=800";
+                }}
               />
               <button
                 onClick={closeModal}
@@ -579,24 +543,15 @@ export default function CategoriesPage() {
               >
                 <X className="w-5 h-5 text-gray-600" />
               </button>
-              <div className="absolute top-4 left-4 flex space-x-2">
+              <div className="absolute top-4 left-4">
                 <span
                   className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    selectedCategory.status === "active"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-800"
-                  }`}
-                >
-                  {selectedCategory.status}
-                </span>
-                <span
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    selectedCategory.parentId
+                    selectedCategory.isSubCategory
                       ? "bg-orange-100 text-orange-800"
                       : "bg-blue-100 text-blue-800"
                   }`}
                 >
-                  {selectedCategory.parentId
+                  {selectedCategory.isSubCategory
                     ? "Sub Category"
                     : "Parent Category"}
                 </span>
@@ -606,47 +561,17 @@ export default function CategoriesPage() {
             {/* Modal Content */}
             <div className="p-6">
               {/* Category Info */}
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                    {selectedCategory.name}
-                  </h2>
-                  {selectedCategory.parentName && (
-                    <p className="text-gray-600">
-                      Parent Category: {selectedCategory.parentName}
-                    </p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {selectedCategory.productsCount}
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                  {selectedCategory.categoryName}
+                </h2>
+                <p className="text-gray-600 mb-4">{selectedCategory.shortDescription}</p>
+                {selectedCategory.longDescription && (
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Description</h3>
+                    <p className="text-gray-600">{selectedCategory.longDescription}</p>
                   </div>
-                  <div className="text-sm text-gray-500">Products</div>
-                </div>
-              </div>
-
-              {/* Images */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                    Main Image
-                  </h3>
-                  <img
-                    src={selectedCategory.mainImage}
-                    alt={`${selectedCategory.name} main`}
-                    className="w-full h-48 object-cover rounded-lg border border-gray-200"
-                  />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                    Banner Image
-                  </h3>
-                  <img
-                    src={selectedCategory.bannerImage}
-                    alt={`${selectedCategory.name} banner`}
-                    className="w-full h-48 object-cover rounded-lg border border-gray-200"
-                  />
-                </div>
+                )}
               </div>
 
               {/* Additional Info */}
@@ -658,15 +583,13 @@ export default function CategoriesPage() {
                   <div>
                     <span className="text-sm text-gray-600">Created Date:</span>
                     <p className="font-medium">
-                      {new Date(
-                        selectedCategory.createdDate
-                      ).toLocaleDateString()}
+                      {selectedCategory.createdAt ? new Date(selectedCategory.createdAt).toLocaleDateString() : 'N/A'}
                     </p>
                   </div>
                   <div>
-                    <span className="text-sm text-gray-600">Status:</span>
-                    <p className="font-medium capitalize">
-                      {selectedCategory.status}
+                    <span className="text-sm text-gray-600">Type:</span>
+                    <p className="font-medium">
+                      {selectedCategory.isSubCategory ? "Sub Category" : "Parent Category"}
                     </p>
                   </div>
                 </div>
@@ -676,9 +599,6 @@ export default function CategoriesPage() {
               <div className="flex space-x-3">
                 <button className="flex-1 bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 transition-colors font-medium">
                   Edit Category
-                </button>
-                <button className="flex-1 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 transition-colors font-medium">
-                  View Products
                 </button>
                 <button
                   onClick={closeModal}
