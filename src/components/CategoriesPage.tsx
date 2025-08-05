@@ -7,12 +7,11 @@ import {
   Eye,
   FolderOpen,
   Folder,
-  Image,
-  Upload,
-  X,
   Save,
   ArrowLeft,
   Loader,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { apiService, Category, CreateUpdateCategoryRequest } from "../services/api";
 
@@ -24,6 +23,7 @@ export default function CategoriesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   const [formData, setFormData] = useState({
     categoryName: "",
     shortDescription: "",
@@ -50,6 +50,7 @@ export default function CategoriesPage() {
         setError(response.errorMessage || "Failed to load categories");
       }
     } catch (error) {
+      console.error("Error loading categories:", error);
       setError(error instanceof Error ? error.message : "Failed to load categories");
     } finally {
       setLoading(false);
@@ -66,6 +67,12 @@ export default function CategoriesPage() {
   const totalCategories = categories.length;
   const parentCategoriesCount = parentCategories.length;
   const subCategoriesCount = categories.filter((cat) => cat.isSubCategory).length;
+
+  const getSubCategories = (parentId: number) => {
+    return categories.filter(cat => 
+      cat.isSubCategory && cat.parentCategoryIds?.includes(parentId)
+    );
+  };
 
   const handleAddCategory = () => {
     setShowAddForm(true);
@@ -84,26 +91,21 @@ export default function CategoriesPage() {
     setIsSubmitting(true);
     setError("");
 
-    console.log("Submitting category data:", formData);
-
     try {
       const categoryData: CreateUpdateCategoryRequest = {
         categoryName: formData.categoryName,
         shortDescription: formData.shortDescription,
         longDescription: formData.longDescription,
         isSubCategory: formData.isSubCategory,
-        coverImage: formData.coverImage || "/default-category.jpg",
+        coverImage: formData.coverImage || "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300",
         parentCategoryIds: formData.isSubCategory ? formData.parentCategoryIds : [],
       };
 
-      console.log("Sending to API:", categoryData);
-
       const response = await apiService.createUpdateCategory(categoryData);
 
-      console.log("API Response:", response);
-
       if (response && response.errorCode === 0) {
-        await loadCategories(); // Reload categories
+        // Success - reload categories and redirect to main page
+        await loadCategories();
         setShowAddForm(false);
         setFormData({
           categoryName: "",
@@ -113,12 +115,12 @@ export default function CategoriesPage() {
           isSubCategory: false,
           coverImage: "",
         });
-        // Show success message
         alert("Category created successfully!");
-      } else if (response) {
-        setError(response.errorMessage || "Failed to create category");
+      } else {
+        setError(response?.errorMessage || "Failed to create category");
       }
     } catch (error) {
+      console.error("Error creating category:", error);
       setError(error instanceof Error ? error.message : "Failed to create category");
     } finally {
       setIsSubmitting(false);
@@ -145,11 +147,22 @@ export default function CategoriesPage() {
     try {
       setError("");
       await apiService.deleteCategory({ categoryId });
-      await loadCategories(); // Reload categories
+      await loadCategories();
       alert("Category deleted successfully!");
     } catch (error) {
+      console.error("Error deleting category:", error);
       setError(error instanceof Error ? error.message : "Failed to delete category");
     }
+  };
+
+  const toggleCategoryExpansion = (categoryId: number) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(categoryId)) {
+      newExpanded.delete(categoryId);
+    } else {
+      newExpanded.add(categoryId);
+    }
+    setExpandedCategories(newExpanded);
   };
 
   if (showAddForm) {
@@ -442,82 +455,143 @@ export default function CategoriesPage() {
           </div>
         )}
 
-        {/* Categories Grid */}
+        {/* Categories List View */}
         {!loading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCategories.map((category) => (
-              <div
-                key={category.id}
-                className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
-              >
-                <div className="relative">
-                  <img
-                    src={category.coverImage || "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300"}
-                    alt={category.categoryName}
-                    className="w-full h-48 object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300";
-                    }}
-                  />
-                  <div className="absolute top-3 left-3">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        category.isSubCategory
-                          ? "bg-orange-100 text-orange-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}
-                    >
-                      {category.isSubCategory ? "Sub Category" : "Parent Category"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold text-gray-800 text-lg">
-                      {category.categoryName}
-                    </h3>
-                    <div className="flex items-center space-x-1">
-                      {category.isSubCategory ? (
-                        <FolderOpen className="w-4 h-4 text-orange-500" />
-                      ) : (
-                        <Folder className="w-4 h-4 text-blue-500" />
-                      )}
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">Categories Hierarchy</h3>
+            </div>
+            
+            <div className="divide-y divide-gray-200">
+              {filteredCategories.filter(cat => !cat.isSubCategory).map((parentCategory) => {
+                const subCategories = getSubCategories(parentCategory.id);
+                const isExpanded = expandedCategories.has(parentCategory.id);
+                
+                return (
+                  <div key={parentCategory.id}>
+                    {/* Parent Category */}
+                    <div className="p-6 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          {subCategories.length > 0 && (
+                            <button
+                              onClick={() => toggleCategoryExpansion(parentCategory.id)}
+                              className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-gray-600" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-gray-600" />
+                              )}
+                            </button>
+                          )}
+                          
+                          <img
+                            src={parentCategory.coverImage || "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300"}
+                            alt={parentCategory.categoryName}
+                            className="w-12 h-12 rounded-lg object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300";
+                            }}
+                          />
+                          
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <h4 className="text-lg font-semibold text-gray-800">
+                                {parentCategory.categoryName}
+                              </h4>
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                                Parent
+                              </span>
+                              {subCategories.length > 0 && (
+                                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                                  {subCategories.length} sub-categories
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-gray-600 text-sm mt-1">
+                              {parentCategory.shortDescription}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleViewCategory(parentCategory)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCategory(parentCategory.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
+                    
+                    {/* Sub Categories */}
+                    {isExpanded && subCategories.length > 0 && (
+                      <div className="bg-gray-50 border-t border-gray-200">
+                        {subCategories.map((subCategory) => (
+                          <div key={subCategory.id} className="p-4 ml-12 border-b border-gray-200 last:border-b-0">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-4">
+                                <img
+                                  src={subCategory.coverImage || "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300"}
+                                  alt={subCategory.categoryName}
+                                  className="w-10 h-10 rounded-lg object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.src = "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300";
+                                  }}
+                                />
+                                
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2">
+                                    <h5 className="font-medium text-gray-800">
+                                      {subCategory.categoryName}
+                                    </h5>
+                                    <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs font-medium rounded-full">
+                                      Sub-category
+                                    </span>
+                                  </div>
+                                  <p className="text-gray-600 text-sm mt-1">
+                                    {subCategory.shortDescription}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleViewCategory(subCategory)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteCategory(subCategory.id)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-
-                  <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                    {category.shortDescription}
-                  </p>
-
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-sm text-gray-500">
-                      Created: {category.createdAt ? new Date(category.createdAt).toLocaleDateString() : 'N/A'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleViewCategory(category)}
-                      className="flex-1 bg-red-50 text-red-600 py-2 px-3 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center space-x-1"
-                    >
-                      <Eye className="w-4 h-4" />
-                      <span className="text-sm">View</span>
-                    </button>
-                    <button className="flex-1 bg-blue-50 text-blue-600 py-2 px-3 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center space-x-1">
-                      <Edit className="w-4 h-4" />
-                      <span className="text-sm">Edit</span>
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteCategory(category.id)}
-                      className="bg-red-50 text-red-600 p-2 rounded-lg hover:bg-red-100 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -559,7 +633,9 @@ export default function CategoriesPage() {
                 onClick={closeModal}
                 className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition-colors"
               >
-                <X className="w-5 h-5 text-gray-600" />
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
               <div className="absolute top-4 left-4">
                 <span
