@@ -44,9 +44,13 @@ export default function CategoriesPage() {
       setError("");
       const response = await apiService.getAllCategories();
       
+     console.log("API Response:", response);
+     
       if (response.errorCode === 0 && response.data) {
+       console.log("Categories data:", response.data);
         setCategories(response.data);
       } else {
+       console.log("API Error:", response.errorMessage);
         setError(response.errorMessage || "Failed to load categories");
       }
     } catch (error) {
@@ -456,14 +460,15 @@ export default function CategoriesPage() {
         )}
 
         {/* Categories List View */}
-        {!loading && (
+       {!loading && categories.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-800">Categories Hierarchy</h3>
+             <p className="text-sm text-gray-600 mt-1">Total: {categories.length} categories</p>
             </div>
             
             <div className="divide-y divide-gray-200">
-              {filteredCategories.filter(cat => !cat.isSubCategory).map((parentCategory) => {
+             {parentCategories.map((parentCategory) => {
                 const subCategories = getSubCategories(parentCategory.id);
                 const isExpanded = expandedCategories.has(parentCategory.id);
                 
@@ -596,23 +601,33 @@ export default function CategoriesPage() {
         )}
 
         {/* Empty State */}
-        {!loading && filteredCategories.length === 0 && (
+       {!loading && categories.length === 0 && !error && (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <FolderOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-800 mb-2">No Categories Found</h3>
             <p className="text-gray-600 mb-4">
-              {searchTerm ? "No categories match your search criteria." : "Get started by creating your first category."}
+             Get started by creating your first category.
             </p>
-            {!searchTerm && (
-              <button
-                onClick={handleAddCategory}
-                className="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors"
-              >
-                Add Your First Category
-              </button>
-            )}
+           <button
+             onClick={handleAddCategory}
+             className="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors"
+           >
+             Add Your First Category
+           </button>
           </div>
         )}
+
+       {/* Debug Info */}
+       {!loading && (
+         <div className="bg-gray-100 rounded-xl border border-gray-200 p-4 text-sm text-gray-600">
+           <p>Debug Info:</p>
+           <p>Categories loaded: {categories.length}</p>
+           <p>Parent categories: {parentCategories.length}</p>
+           <p>Sub categories: {subCategoriesCount}</p>
+           <p>Loading: {loading.toString()}</p>
+           <p>Error: {error || 'None'}</p>
+         </div>
+       )}
       </div>
 
       {/* Category Detail Modal */}
