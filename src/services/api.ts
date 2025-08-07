@@ -69,6 +69,8 @@ export interface Category {
   updatedAt?: string;
   parentCategories?: Category[];
   subCategories?: Category[];
+  isDeleted?: boolean;
+  vendorId?: number;
 }
 
 export interface CreateUpdateCategoryRequest {
@@ -98,6 +100,9 @@ export interface CategoryResponse {
   data: Category | null;
 }
 
+export interface UpdateCategoryRequest extends CreateUpdateCategoryRequest {
+  id: number;
+}
 class ApiService {
   private async makeRequest<T>(
   endpoint: string,
@@ -207,12 +212,17 @@ class ApiService {
   }
 
   async createUpdateCategory(data: CreateUpdateCategoryRequest): Promise<CategoryResponse> {
-    const response = await this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
+    return this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
       method: 'POST',
       body: JSON.stringify(data),
     });
-    console.log("Raw API response for createUpdateCategory:", response);
-    return response;
+  }
+
+  async updateCategory(data: UpdateCategoryRequest): Promise<CategoryResponse> {
+    return this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteCategory(data: DeleteCategoryRequest): Promise<{ success: boolean; message: string }> {
