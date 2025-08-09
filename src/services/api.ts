@@ -212,6 +212,7 @@ class ApiService {
   }
 
   async createUpdateCategory(data: CreateUpdateCategoryRequest): Promise<CategoryResponse> {
+    console.log('Creating/Updating category with data:', data);
     return this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -219,7 +220,7 @@ class ApiService {
   }
 
   async updateCategory(data: UpdateCategoryRequest): Promise<CategoryResponse> {
-    // Use the same endpoint as create since the API handles both create and update
+    console.log('Updating category with data:', data);
     const response = await this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
       method: 'POST',
       body: JSON.stringify(data),

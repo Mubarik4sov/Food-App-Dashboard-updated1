@@ -35,7 +35,6 @@ export default function CategoriesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   const [filterType, setFilterType] = useState<"all" | "parent" | "sub">("all");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [formData, setFormData] = useState({
     categoryName: "",
     shortDescription: "",
@@ -56,8 +55,11 @@ export default function CategoriesPage() {
       setError("");
       const response = await apiService.getAllCategories();
       
+      console.log('Categories API Response:', response);
+      
       if (response.errorCode === 0 && response.data) {
         setCategories(response.data);
+        console.log('Categories loaded:', response.data);
       } else {
         setError(response.errorMessage || "Failed to load categories");
       }
@@ -131,6 +133,13 @@ export default function CategoriesPage() {
     setError("");
 
     try {
+      // Ensure sub-categories have parent categories selected
+      if (formData.isSubCategory && formData.parentCategoryIds.length === 0) {
+        setError("Please select at least one parent category for sub-category");
+        setIsSubmitting(false);
+        return;
+      }
+
       const categoryData: CreateUpdateCategoryRequest | UpdateCategoryRequest = {
         ...(editingCategory && { id: editingCategory.id }),
         categoryName: formData.categoryName.trim(),
@@ -141,12 +150,16 @@ export default function CategoriesPage() {
         parentCategoryIds: formData.isSubCategory ? formData.parentCategoryIds : [],
       };
 
+      console.log('Submitting category data:', categoryData);
+
       let response;
       if (editingCategory) {
         response = await apiService.updateCategory(categoryData as UpdateCategoryRequest);
       } else {
         response = await apiService.createUpdateCategory(categoryData);
       }
+
+      console.log('API Response:', response);
 
       if (response && response.errorCode === 0) {
         await loadCategories();
@@ -269,7 +282,10 @@ export default function CategoriesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => handleInputChange("isSubCategory", false)}
+                  onClick={() => {
+                    handleInputChange("isSubCategory", false);
+                    handleInputChange("parentCategoryIds", []);
+                  }}
                   className={`p-4 rounded-lg border-2 transition-all ${
                     !formData.isSubCategory
                       ? "border-blue-500 bg-blue-50 text-blue-700"
@@ -384,7 +400,7 @@ export default function CategoriesPage() {
                         </label>
                       ))}
                     </div>
-                    {formData.parentCategoryIds.length === 0 && (
+                    {formData.isSubCategory && formData.parentCategoryIds.length === 0 && (
                       <p className="text-sm text-red-500 mt-1">Please select at least one parent category</p>
                     )}
                   </div>
@@ -468,24 +484,6 @@ export default function CategoriesPage() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
-            <div className="flex items-center bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode("list")}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === "list" ? "bg-white shadow-sm text-red-600" : "text-gray-600"
-                }`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === "grid" ? "bg-white shadow-sm text-red-600" : "text-gray-600"
-                }`}
-              >
-                <Grid className="w-4 h-4" />
-              </button>
-            </div>
             <button
               onClick={handleRefresh}
               disabled={loading}
@@ -590,7 +588,7 @@ export default function CategoriesPage() {
         </div>
       )}
 
-      {/* Categories List View */}
+      {/* Categories Table Accordion */}
       {!loading && categories.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200">
           <div className="p-6 border-b border-gray-200">
@@ -602,151 +600,171 @@ export default function CategoriesPage() {
             </div>
           </div>
           
+          {/* Table Header */}
+          <div className="bg-gray-50 border-b border-gray-200">
+            <div className="grid grid-cols-12 gap-4 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <div className="col-span-1"></div>
+              <div className="col-span-4">Category Name</div>
+              <div className="col-span-3">Description</div>
+              <div className="col-span-2">Type</div>
+              <div className="col-span-2">Actions</div>
+            </div>
+          </div>
+          
           <div className="divide-y divide-gray-200">
             {parentCategories.map((parentCategory) => {
               const subCategories = getSubCategories(parentCategory.id);
               const isExpanded = expandedCategories.has(parentCategory.id);
               
               return (
-                <div key={parentCategory.id} className="hover:bg-gray-50 transition-colors">
-                  {/* Parent Category */}
-                  <div className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4 flex-1">
+                <div key={parentCategory.id}>
+                  {/* Parent Category Row */}
+                  <div className="hover:bg-gray-50 transition-colors">
+                    <div className="grid grid-cols-12 gap-4 px-6 py-4 items-center">
+                      <div className="col-span-1">
                         {subCategories.length > 0 && (
                           <button
                             onClick={() => toggleCategoryExpansion(parentCategory.id)}
                             className="p-1 hover:bg-gray-200 rounded transition-colors"
                           >
                             {isExpanded ? (
-                              <ChevronDown className="w-5 h-5 text-gray-600" />
+                              <ChevronDown className="w-4 h-4 text-gray-600" />
                             ) : (
-                              <ChevronRight className="w-5 h-5 text-gray-600" />
+                              <ChevronRight className="w-4 h-4 text-gray-600" />
                             )}
                           </button>
                         )}
-                        
-                        <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 flex items-center justify-center">
-                          <img
-                            src={parentCategory.coverImage}
-                            alt={parentCategory.categoryName}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                            }}
-                          />
-                          <ImageIcon className="w-6 h-6 text-gray-400 hidden" />
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <h4 className="text-lg font-semibold text-gray-800 truncate">
-                              {parentCategory.categoryName}
-                            </h4>
-                            <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full whitespace-nowrap">
-                              Parent Category
-                            </span>
+                      </div>
+                      
+                      <div className="col-span-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 flex items-center justify-center">
+                            <img
+                              src={parentCategory.coverImage}
+                              alt={parentCategory.categoryName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                              }}
+                            />
+                            <ImageIcon className="w-4 h-4 text-gray-400 hidden" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-800">{parentCategory.categoryName}</h4>
                             {subCategories.length > 0 && (
-                              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full whitespace-nowrap">
+                              <span className="text-xs text-gray-500">
                                 {subCategories.length} sub-categories
                               </span>
                             )}
                           </div>
-                          <p className="text-gray-600 text-sm mb-1 line-clamp-2">
-                            {parentCategory.shortDescription}
-                          </p>
-                          {parentCategory.longDescription && (
-                            <p className="text-gray-500 text-xs line-clamp-1">
-                              {parentCategory.longDescription}
-                            </p>
-                          )}
                         </div>
                       </div>
                       
-                      <div className="flex items-center space-x-2 ml-4">
-                        <button
-                          onClick={() => handleViewCategory(parentCategory)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleEditCategory(parentCategory)}
-                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                          title="Edit Category"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteCategory(parentCategory.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete Category"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="col-span-3">
+                        <p className="text-sm text-gray-600 line-clamp-2">
+                          {parentCategory.shortDescription}
+                        </p>
+                      </div>
+                      
+                      <div className="col-span-2">
+                        <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                          Parent Category
+                        </span>
+                      </div>
+                      
+                      <div className="col-span-2">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleViewCategory(parentCategory)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleEditCategory(parentCategory)}
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Edit Category"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCategory(parentCategory.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete Category"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
                   
                   {/* Sub Categories */}
                   {isExpanded && subCategories.length > 0 && (
-                    <div className="bg-gray-50 border-t border-gray-200">
+                    <div className="bg-gray-50">
                       {subCategories.map((subCategory) => (
-                        <div key={subCategory.id} className="p-4 ml-16 border-b border-gray-200 last:border-b-0 hover:bg-gray-100 transition-colors">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4 flex-1">
-                              <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
-                                <img
-                                  src={subCategory.coverImage}
-                                  alt={subCategory.categoryName}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                                  }}
-                                />
-                                <ImageIcon className="w-4 h-4 text-gray-400 hidden" />
-                              </div>
-                              
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center space-x-2 mb-1">
-                                  <h5 className="font-medium text-gray-800 truncate">
-                                    {subCategory.categoryName}
-                                  </h5>
-                                  <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs font-medium rounded-full whitespace-nowrap">
-                                    Sub-category
-                                  </span>
+                        <div key={subCategory.id} className="hover:bg-gray-100 transition-colors">
+                          <div className="grid grid-cols-12 gap-4 px-6 py-3 items-center border-l-4 border-orange-300 ml-8">
+                            <div className="col-span-1"></div>
+                            
+                            <div className="col-span-4">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
+                                  <img
+                                    src={subCategory.coverImage}
+                                    alt={subCategory.categoryName}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                    }}
+                                  />
+                                  <ImageIcon className="w-3 h-3 text-gray-400 hidden" />
                                 </div>
-                                <p className="text-gray-600 text-sm line-clamp-1">
-                                  {subCategory.shortDescription}
-                                </p>
+                                <div>
+                                  <h5 className="font-medium text-gray-800">{subCategory.categoryName}</h5>
+                                </div>
                               </div>
                             </div>
                             
-                            <div className="flex items-center space-x-2 ml-4">
-                              <button
-                                onClick={() => handleViewCategory(subCategory)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="View Details"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleEditCategory(subCategory)}
-                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                title="Edit Category"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteCategory(subCategory.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Delete Category"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                            <div className="col-span-3">
+                              <p className="text-sm text-gray-600 line-clamp-1">
+                                {subCategory.shortDescription}
+                              </p>
+                            </div>
+                            
+                            <div className="col-span-2">
+                              <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs font-medium rounded-full">
+                                Sub-category
+                              </span>
+                            </div>
+                            
+                            <div className="col-span-2">
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleViewCategory(subCategory)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="View Details"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleEditCategory(subCategory)}
+                                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                  title="Edit Category"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteCategory(subCategory.id)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete Category"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
