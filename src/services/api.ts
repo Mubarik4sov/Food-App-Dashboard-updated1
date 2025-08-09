@@ -219,10 +219,12 @@ class ApiService {
   }
 
   async updateCategory(data: UpdateCategoryRequest): Promise<CategoryResponse> {
-    return this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
+    // Use the same endpoint as create since the API handles both create and update
+    const response = await this.makeRequest<CategoryResponse>('/category/createUpdateCategory', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+    return response;
   }
 
   async deleteCategory(data: DeleteCategoryRequest): Promise<{ success: boolean; message: string }> {
