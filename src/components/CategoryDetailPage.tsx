@@ -37,12 +37,15 @@ export default function CategoryDetailPage() {
   const [category, setCategory] = useState<Category | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [products, setProducts] = useState(mockProducts);
+  const [products] = useState(mockProducts);
   const [subCategories, setSubCategories] = useState<Category[]>([]);
 
   useEffect(() => {
     if (id) {
       fetchCategoryDetails(id);
+    } else {
+      setError('No category ID provided');
+      setLoading(false);
     }
   }, [id]);
 
@@ -53,39 +56,60 @@ export default function CategoryDetailPage() {
       
       console.log('Fetching category details for ID:', categoryId);
       
-      // Fetch all categories and find the one we need
+      // Try to fetch all categories first
       const response = await apiService.getAllCategories();
-      console.log('API Response:', response);
+      console.log('Full API Response:', response);
       
-      if (response.errorCode === 0 && response.data) {
-        const foundCategory = response.data.find(cat => 
-          cat.id?.toString() === categoryId || 
-          cat._id?.toString() === categoryId
-        );
+      // Handle different response structures
+      let categories: Category[] = [];
+      
+      if (response && Array.isArray(response)) {
+        categories = response;
+      } else if (response && response.data && Array.isArray(response.data)) {
+        categories = response.data;
+      } else if (response && response.errorCode === 0 && response.data) {
+        categories = Array.isArray(response.data) ? response.data : [response.data];
+      } else {
+        console.error('Unexpected API response structure:', response);
+        setError('Failed to load categories - unexpected response format');
+        return;
+      }
+      
+      console.log('Processed categories:', categories);
+      
+      if (categories.length === 0) {
+        setError('No categories found');
+        return;
+      }
+      
+      // Find the category by ID (try different ID fields)
+      const foundCategory = categories.find(cat => {
+        const catId = cat.id || cat._id;
+        return catId && (catId.toString() === categoryId || catId === parseInt(categoryId));
+      });
+      
+      console.log('Found category:', foundCategory);
+      
+      if (foundCategory) {
+        setCategory(foundCategory);
         
-        console.log('Found category:', foundCategory);
-        
-        if (foundCategory) {
-          setCategory(foundCategory);
-          
-          // If it's a parent category, fetch its sub-categories
-          if (!foundCategory.isSubCategory) {
-            const subCats = response.data.filter(cat => 
-              cat.isSubCategory && 
-              cat.parentCategoryIds && 
-              (cat.parentCategoryIds.includes(foundCategory.id) || 
-               cat.parentCategoryIds.includes(foundCategory._id))
+        // If it's a parent category, find its sub-categories
+        if (!foundCategory.isSubCategory) {
+          const foundCategoryId = foundCategory.id || foundCategory._id;
+          const subCats = categories.filter(cat => {
+            if (!cat.isSubCategory || !cat.parentCategoryIds) return false;
+            
+            return cat.parentCategoryIds.some(parentId => 
+              parentId === foundCategoryId || 
+              parentId.toString() === foundCategoryId?.toString()
             );
-            setSubCategories(subCats);
-          }
+          });
           
-          // Set mock products for now
-          setProducts(mockProducts);
-        } else {
-          setError('Category not found');
+          console.log('Found sub-categories:', subCats);
+          setSubCategories(subCats);
         }
       } else {
-        setError(response.errorMessage || 'Failed to load categories');
+        setError(`Category with ID ${categoryId} not found`);
       }
       
     } catch (err) {
@@ -117,6 +141,7 @@ export default function CategoryDetailPage() {
     }
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="space-y-6">
@@ -130,6 +155,7 @@ export default function CategoryDetailPage() {
     );
   }
 
+  // Error state
   if (error || !category) {
     return (
       <div className="space-y-6">
@@ -149,6 +175,10 @@ export default function CategoryDetailPage() {
     );
   }
 
+  // Get category name (handle different property names)
+  const categoryName = category.categoryName || category.name || 'Unnamed Category';
+  const categoryId = category.id || category._id;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -157,7 +187,7 @@ export default function CategoryDetailPage() {
         <div className="relative h-64 bg-gradient-to-r from-gray-100 to-gray-200">
           <img
             src={category.coverImage || 'https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=800'}
-            alt={category.categoryName || category.name}
+            alt={categoryName}
             className="w-full h-full object-cover"
             onError={(e) => {
               e.currentTarget.style.display = 'none';
@@ -194,10 +224,10 @@ export default function CategoryDetailPage() {
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
               <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                {category.categoryName || category.name}
+                {categoryName}
               </h1>
               <p className="text-lg text-gray-600 mb-4">
-                {category.shortDescription}
+                {category.shortDescription || 'No description available'}
               </p>
               {category.longDescription && (
                 <p className="text-gray-700 leading-relaxed">
@@ -216,7 +246,7 @@ export default function CategoryDetailPage() {
                 <span>Edit</span>
               </button>
               <button
-                onClick={() => handleDelete(category.id)}
+                onClick={() => handleDelete(categoryId)}
                 className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center space-x-2"
               >
                 <Trash2 className="w-4 h-4" />
@@ -261,9 +291,9 @@ export default function CategoryDetailPage() {
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-3">Parent Categories</h3>
               <div className="flex flex-wrap gap-2">
-                {category.parentCategoryIds.map(parentId => (
-                  <span key={parentId} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                    Parent Category
+                {category.parentCategoryIds.map((parentId, index) => (
+                  <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
+                    Parent Category #{parentId}
                   </span>
                 ))}
               </div>
@@ -287,24 +317,29 @@ export default function CategoryDetailPage() {
 
           {subCategories.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subCategories.map((subCategory) => (
-                <div key={subCategory.id || subCategory._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-center space-x-3 mb-3">
-                    <img
-                      src={subCategory.coverImage || 'https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300'}
-                      alt={subCategory.categoryName || subCategory.name}
-                      className="w-12 h-12 rounded-lg object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300";
-                      }}
-                    />
-                    <div>
-                      <h4 className="font-medium text-gray-800">{subCategory.categoryName || subCategory.name}</h4>
-                      <p className="text-sm text-gray-600">{subCategory.shortDescription}</p>
+              {subCategories.map((subCategory) => {
+                const subCategoryId = subCategory.id || subCategory._id;
+                const subCategoryName = subCategory.categoryName || subCategory.name;
+                
+                return (
+                  <div key={subCategoryId} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <img
+                        src={subCategory.coverImage || 'https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300'}
+                        alt={subCategoryName}
+                        className="w-12 h-12 rounded-lg object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300";
+                        }}
+                      />
+                      <div>
+                        <h4 className="font-medium text-gray-800">{subCategoryName}</h4>
+                        <p className="text-sm text-gray-600">{subCategory.shortDescription || 'No description'}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8">
@@ -328,12 +363,7 @@ export default function CategoryDetailPage() {
           </span>
         </div>
 
-        {loading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto mb-3"></div>
-            <p className="text-gray-600">Loading products...</p>
-          </div>
-        ) : products.length > 0 ? (
+        {products.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {products.map((product) => (
               <div key={product.id} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
@@ -375,3 +405,4 @@ export default function CategoryDetailPage() {
       </div>
     </div>
   );
+}
