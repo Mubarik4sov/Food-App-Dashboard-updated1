@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Trash2, Package, FolderOpen, Image as ImageIcon, Calendar, Tag } from 'lucide-react';
-import { Category } from '../services/api';
-
-interface CategoryDetailPageProps {
-  category: Category;
-  onBack: () => void;
-  onEdit: (category: Category) => void;
-  onDelete: (categoryId: number) => void;
-}
+import { apiService, Category } from '../services/api';
 
 // Mock products data - replace with actual API call
 const mockProducts = [
@@ -37,21 +31,123 @@ const mockProducts = [
   }
 ];
 
-export default function CategoryDetailPage({ category, onBack, onEdit, onDelete }: CategoryDetailPageProps) {
+export default function CategoryDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [category, setCategory] = useState<Category | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState(mockProducts);
   const [subCategories, setSubCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // In a real app, you would fetch products and subcategories for this category
-    // For now, we'll use mock data
-    setLoading(true);
-    setTimeout(() => {
-      setProducts(mockProducts);
-      setSubCategories([]); // Mock subcategories if needed
+    if (id) {
+      fetchCategoryDetails(id);
+    }
+  }, [id]);
+
+  const fetchCategoryDetails = async (categoryId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Fetching category details for ID:', categoryId);
+      
+      // Fetch all categories and find the one we need
+      const response = await apiService.getAllCategories();
+      console.log('API Response:', response);
+      
+      if (response.errorCode === 0 && response.data) {
+        const foundCategory = response.data.find(cat => 
+          cat.id?.toString() === categoryId || 
+          cat._id?.toString() === categoryId
+        );
+        
+        console.log('Found category:', foundCategory);
+        
+        if (foundCategory) {
+          setCategory(foundCategory);
+          
+          // If it's a parent category, fetch its sub-categories
+          if (!foundCategory.isSubCategory) {
+            const subCats = response.data.filter(cat => 
+              cat.isSubCategory && 
+              cat.parentCategoryIds && 
+              (cat.parentCategoryIds.includes(foundCategory.id) || 
+               cat.parentCategoryIds.includes(foundCategory._id))
+            );
+            setSubCategories(subCats);
+          }
+          
+          // Set mock products for now
+          setProducts(mockProducts);
+        } else {
+          setError('Category not found');
+        }
+      } else {
+        setError(response.errorMessage || 'Failed to load categories');
+      }
+      
+    } catch (err) {
+      console.error('Error fetching category details:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load category details');
+    } finally {
       setLoading(false);
-    }, 500);
-  }, [category.id]);
+    }
+  };
+
+  const handleBack = () => {
+    navigate('/categories');
+  };
+
+  const handleEdit = (category: Category) => {
+    // Navigate back to categories page with edit mode
+    navigate('/categories', { state: { editCategory: category } });
+  };
+
+  const handleDelete = async (categoryId: number) => {
+    if (window.confirm('Are you sure you want to delete this category?')) {
+      try {
+        await apiService.deleteCategory({ categoryId: categoryId });
+        navigate('/categories');
+      } catch (err) {
+        console.error('Error deleting category:', err);
+        alert('Failed to delete category');
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
+            <span className="ml-3 text-gray-600">Loading category details...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !category) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex flex-col items-center justify-center py-12">
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Category Not Found</h2>
+            <p className="text-gray-600 mb-4">{error || 'The requested category could not be found.'}</p>
+            <button
+              onClick={handleBack}
+              className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
+            >
+              Back to Categories
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -60,8 +156,8 @@ export default function CategoryDetailPage({ category, onBack, onEdit, onDelete 
         {/* Cover Image */}
         <div className="relative h-64 bg-gradient-to-r from-gray-100 to-gray-200">
           <img
-            src={category.coverImage}
-            alt={category.categoryName}
+            src={category.coverImage || 'https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=800'}
+            alt={category.categoryName || category.name}
             className="w-full h-full object-cover"
             onError={(e) => {
               e.currentTarget.style.display = 'none';
@@ -74,7 +170,7 @@ export default function CategoryDetailPage({ category, onBack, onEdit, onDelete 
           
           {/* Back Button */}
           <button
-            onClick={onBack}
+            onClick={handleBack}
             className="absolute top-4 left-4 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-lg p-2 transition-all duration-200 flex items-center space-x-2"
           >
             <ArrowLeft className="w-5 h-5 text-gray-700" />
@@ -98,7 +194,7 @@ export default function CategoryDetailPage({ category, onBack, onEdit, onDelete 
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
               <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                {category.categoryName}
+                {category.categoryName || category.name}
               </h1>
               <p className="text-lg text-gray-600 mb-4">
                 {category.shortDescription}
@@ -113,14 +209,14 @@ export default function CategoryDetailPage({ category, onBack, onEdit, onDelete 
             {/* Action Buttons */}
             <div className="flex items-center space-x-3 ml-6">
               <button
-                onClick={() => onEdit(category)}
+                onClick={() => handleEdit(category)}
                 className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2"
               >
                 <Edit className="w-4 h-4" />
                 <span>Edit</span>
               </button>
               <button
-                onClick={() => onDelete(category.id)}
+                onClick={() => handleDelete(category.id)}
                 className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center space-x-2"
               >
                 <Trash2 className="w-4 h-4" />
@@ -137,7 +233,7 @@ export default function CategoryDetailPage({ category, onBack, onEdit, onDelete 
                 <span className="font-medium text-gray-700">Created Date</span>
               </div>
               <span className="text-gray-600">
-                {category.createdAt ? new Date(category.createdAt).toLocaleDateString() : 'N/A'}
+                {category.createdAt ? new Date(category.createdAt).toLocaleDateString() : 'Recently created'}
               </span>
             </div>
 
@@ -167,7 +263,7 @@ export default function CategoryDetailPage({ category, onBack, onEdit, onDelete 
               <div className="flex flex-wrap gap-2">
                 {category.parentCategoryIds.map(parentId => (
                   <span key={parentId} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                    Parent ID: {parentId}
+                    Parent Category
                   </span>
                 ))}
               </div>
@@ -192,18 +288,18 @@ export default function CategoryDetailPage({ category, onBack, onEdit, onDelete 
           {subCategories.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {subCategories.map((subCategory) => (
-                <div key={subCategory.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                <div key={subCategory.id || subCategory._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                   <div className="flex items-center space-x-3 mb-3">
                     <img
-                      src={subCategory.coverImage}
-                      alt={subCategory.categoryName}
+                      src={subCategory.coverImage || 'https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300'}
+                      alt={subCategory.categoryName || subCategory.name}
                       className="w-12 h-12 rounded-lg object-cover"
                       onError={(e) => {
                         e.currentTarget.src = "https://images.pexels.com/photos/315755/pexels-photo-315755.jpeg?auto=compress&cs=tinysrgb&w=300";
                       }}
                     />
                     <div>
-                      <h4 className="font-medium text-gray-800">{subCategory.categoryName}</h4>
+                      <h4 className="font-medium text-gray-800">{subCategory.categoryName || subCategory.name}</h4>
                       <p className="text-sm text-gray-600">{subCategory.shortDescription}</p>
                     </div>
                   </div>
@@ -279,4 +375,3 @@ export default function CategoryDetailPage({ category, onBack, onEdit, onDelete 
       </div>
     </div>
   );
-}
